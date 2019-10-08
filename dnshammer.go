@@ -14,13 +14,15 @@ import (
 func main() {
 	ctx := context.Background()
 	myResolver := net.Resolver{}
-	var gos uint64
-	CONCURRENCYCOUNT := 1
+	var currentJobs uint64
+	var successfulQueries uint64
+	var totalQueries uint64
+	maxConcurrency := 1
 
 	fmt.Println("Dropping DNS Hammer...")
 
 	// open list file for reading
-	file, err := os.Open("/domains.txt")
+	file, err := os.Open("domains.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -28,33 +30,43 @@ func main() {
 
 	// resolve each line
 	scanner := bufio.NewScanner(file)
-	// for each line in the file
+	// for each line (domain) in the file
 	for scanner.Scan() {
-		for gos > uint64(CONCURRENCYCOUNT) {
+		// if there are already too many goroutines, wait
+		for currentJobs > uint64(maxConcurrency) {
 			time.Sleep(1)
 		}
-		// add 1 to our wait group
-		atomic.AddUint64(&gos, 1)
+		// keep track of how many goroutines are running
+		atomic.AddUint64(&currentJobs, 1)
 		go func() {
-			defer atomic.AddUint64(&gos, ^uint64(0))
-			resolve(ctx, myResolver, scanner.Text())
+			// at the end, subtract 1 from the wait group
+			defer atomic.AddUint64(&currentJobs, ^uint64(0))
+			err := resolve(ctx, myResolver, scanner.Text())
+			if err == nil {
+				atomic.AddUint64(&successfulQueries, 1)
+			}
+			atomic.AddUint64(&totalQueries, 1)
+			fmt.Println(fmt.Sprintf("Success Rate: %.2f", float64(successfulQueries)/float64(totalQueries)))
 		}()
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 	// wait for all goroutines to finish
-	for gos > 0 {
+	for currentJobs > 0 {
 		time.Sleep(1)
 	}
 }
 
-func resolve(ctx context.Context, myResolver net.Resolver, host string) {
-	answer, err := myResolver.LookupIPAddr(ctx, host)
+func resolve(ctx context.Context, myResolver net.Resolver, host string) error{
+	_, err := myResolver.LookupIPAddr(ctx, host)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
+		return err
 	} else {
-		fmt.Printf("%s:    ", host)
-		fmt.Printf("%s\n", answer[len(answer)-1])
+		// when verbose logging is implemented, these should be enabled only with verbose logging
+		//fmt.Printf("%s:    ", host)
+		//fmt.Printf("%s\n", answer[len(answer)-1])
+		return nil
 	}
 }
