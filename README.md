@@ -1,6 +1,6 @@
 # DNS Hammer
 
-Simple go program to many DNS queries.
+Simple go program to perform many DNS queries.
 This can be useful when trying to push load onto DNS servers.
 I need this container to simulate a DNS load on a GKE cluster.
 
@@ -8,6 +8,9 @@ To deploy in k8s:
 ```bash
 kubectl create deployment dns-hammer --image=gcr.io/tyrionlannister-237214/dns-hammer
 ```
+
+## Thanks
+Thanks to OpenDNS for domains: https://github.com/opendns/public-domain-lists
 
 ## TODO
 - Periodically print out the performance instead of every resolution

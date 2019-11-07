@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
+	"math/rand"
 )
 
 func main() {
@@ -17,6 +18,7 @@ func main() {
 	var currentJobs uint64
 	var successfulQueries uint64
 	var totalQueries uint64
+	domains := make([]string, 0)
 	maxConcurrency := 1
 
 	fmt.Println("Dropping DNS Hammer...")
@@ -28,10 +30,21 @@ func main() {
 	}
 	defer file.Close()
 
-	// resolve each line
+	// read in our text file
 	scanner := bufio.NewScanner(file)
 	// for each line (domain) in the file
 	for scanner.Scan() {
+		domains = append(domains, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	// shuffle the slice
+	shuffle(domains)
+
+	// iterate over the domains and resolve each one
+	for _, d := range domains {
 		// if there are already too many goroutines, wait
 		for currentJobs > uint64(maxConcurrency) {
 			time.Sleep(1)
@@ -41,7 +54,7 @@ func main() {
 		go func() {
 			// at the end, subtract 1 from the wait group
 			defer atomic.AddUint64(&currentJobs, ^uint64(0))
-			err := resolve(ctx, myResolver, scanner.Text())
+			err := resolve(ctx, myResolver, d)
 			if err == nil {
 				atomic.AddUint64(&successfulQueries, 1)
 			}
@@ -49,9 +62,7 @@ func main() {
 			fmt.Println(fmt.Sprintf("Success Rate: %.2f", float64(successfulQueries)/float64(totalQueries)))
 		}()
 	}
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
+
 	// wait for all goroutines to finish
 	for currentJobs > 0 {
 		time.Sleep(1)
@@ -69,4 +80,16 @@ func resolve(ctx context.Context, myResolver net.Resolver, host string) error{
 		//fmt.Printf("%s\n", answer[len(answer)-1])
 		return nil
 	}
+}
+
+// source: https://www.calhoun.io/how-to-shuffle-arrays-and-slices-in-go/
+// shuffles a slice in place (no return needed <3)
+func shuffle(vals []string) {
+  r := rand.New(rand.NewSource(time.Now().Unix()))
+  for len(vals) > 0 {
+    n := len(vals)
+    randIndex := r.Intn(n)
+    vals[n-1], vals[randIndex] = vals[randIndex], vals[n-1]
+    vals = vals[:n-1]
+  }
 }
